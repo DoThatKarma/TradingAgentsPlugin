@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **ta_plugins** — a plugin system for TradingAgents: registry, atomic runtime
+  patching of agent factories, run-scoped plugin application, and two built-in
+  plugins for injecting labeled, length-capped user instructions (per-agent
+  LLM prepending via `prompt_prefix_plugin`; Portfolio-Manager-only state
+  injection via `custom_instructions_plugin`). Zero upstream file edits
+  beyond one documented `pyproject.toml` packaging line. Docs in
+  `docs/plugins.md`; tests in `tests/plugins/` (unit + offline end-to-end
+  against real upstream agent nodes).
+
 ## [0.4.0] — 2026-08-31
 
 Look-ahead and point-in-time fixes across the data and memory layers, clearer
