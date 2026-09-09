@@ -6,14 +6,18 @@ Uses a recording fake LLM - no network, no API keys - while the genuine
 bull_researcher factory is resolved through the patched setup module.
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import tradingagents.graph.setup as ta_setup
 from ta_plugins import (
     apply_plugins,
     get_registry,
     prompt_prefix_plugin,
     reset_patches,
 )
-
-import tradingagents.graph.setup as ta_setup
 
 
 class _Response:
