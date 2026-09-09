@@ -23,9 +23,18 @@ def test_duplicate_name_rejected():
         register(Plugin(name="dupe"))
 
 
-def test_empty_name_rejected():
+@pytest.mark.parametrize(
+    "bad_name",
+    ["", "UPPER", "has space", "slash/name", "a" * 65, "_leading", "x\n"],
+)
+def test_invalid_names_rejected(bad_name):
     with pytest.raises(ValueError):
-        register(Plugin(name=""))
+        register(Plugin(name=bad_name))
+
+
+def test_dotted_builtin_style_name_allowed():
+    plugin = register(Plugin(name="builtin.custom_instructions"))
+    assert get_registry().get("builtin.custom_instructions") is plugin
 
 
 def test_non_plugin_rejected():
