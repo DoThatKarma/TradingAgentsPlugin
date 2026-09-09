@@ -128,3 +128,22 @@ def test_custom_instructions_injects_labeled_block_into_past_context():
 def test_custom_instructions_rejects_non_string():
     with pytest.raises(TypeError):
         custom_instructions_plugin(123)
+
+
+def test_prompt_prefix_composes_in_prompt_llm_chains():
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from ta_plugins.builtin.prompt_prefix import _PrefixLLM
+
+    block = instruction_block("Be precise.", 4000)
+    prompt = ChatPromptTemplate.from_messages([("human", "{question}")])
+
+    seq = prompt | _PrefixLLM(DummyLLM(), block)
+    _tag, msgs = seq.invoke({"question": "hi"})
+    assert isinstance(msgs[0], SystemMessage)
+    assert UNTRUSTED_HEADER in msgs[0].content
+    assert msgs[-1].content == "hi"
+
+    seq2 = prompt | _PrefixLLM(DummyLLM(), block).bind_tools([])
+    _tag2, msgs2 = seq2.invoke({"question": "yo"})
+    assert UNTRUSTED_HEADER in msgs2[0].content

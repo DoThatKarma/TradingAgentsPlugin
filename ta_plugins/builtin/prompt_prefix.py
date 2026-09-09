@@ -1,90 +1,80 @@
 """Built-in plugin: prepend user instructions to ANY selected agent.
 
-Mechanism (zero upstream edits): wraps the LLM object that is passed into
-the targeted agent factories, so a labeled instruction block is prepended
-to every message list at invoke time. This reaches all agents, supports
-per-agent targeting, and keeps persisted state (reports, debate history)
-clean.
+Mechanism (zero upstream edits): wraps the LLM object passed into the
+targeted agent factories, so a labeled instruction block is prepended to
+every LLM invocation - including tool-bound analyst loops (``llm.bind_tools``)
+and structured-output calls (``llm.with_structured_output``).
 
-Limitations (documented honestly):
-- only ``invoke``-style calls are prepended; bare ``stream`` on the LLM is
-  forwarded unwrapped (upstream nodes use invoke through LangGraph);
-- structured-output calls invoked with dict payloads pass through unchanged
-  (message-list inputs are still prepended).
+The proxies subclass ``langchain_core.runnables.Runnable`` so they compose
+natively in upstream ``prompt | llm.bind_tools(...)`` chains, and they convert
+``PromptValue`` inputs (produced by ``prompt | llm`` sequences) via
+``to_messages()`` before prefixing. Attribute access forwards transparently
+to the inner LLM; native non-invoke paths reached only through that
+forwarding (e.g. a manually grabbed ``inner.stream``) bypass the prefix by
+design - upstream agent nodes invoke through the wrapped runnables.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.prompt_values import PromptValue
+from langchain_core.runnables import Runnable
 
 from ..patching import FACTORY_NAMES
 from ..registry import Plugin
-from .labels import (
-    DEFAULT_MAX_CHARS,
-    instruction_block,
-    validate_instructions,
-)
+from .labels import DEFAULT_MAX_CHARS, instruction_block, validate_instructions
 
 
-def _as_message_list(messages: object, block: str) -> list:
-    prefix = SystemMessage(content=block)
-    if isinstance(messages, str):
-        return [prefix, HumanMessage(content=messages)]
-    if isinstance(messages, (list, tuple)):
-        return [prefix, *messages]
-    return [prefix, messages]
+def _prepare_input(first: object, block: str) -> object:
+    """Normalize chain inputs so the instruction block is always prepended."""
+    if isinstance(first, PromptValue):
+        first = first.to_messages()
+    if isinstance(first, (str, list, tuple)):
+        prefix = SystemMessage(content=block)
+        if isinstance(first, str):
+            return [prefix, HumanMessage(content=first)]
+        return [prefix, *first]
+    return first
 
 
-class _PrefixRunnable:
+class _PrefixRunnable(Runnable):
     """Wraps a bound/structured runnable; prepends the block on invoke."""
 
-    def __init__(self, inner: Callable, block: str) -> None:
+    def __init__(self, inner: Runnable, block: str) -> None:
         self._inner = inner
         self._block = block
 
-    def invoke(self, first: object, *args: object, **kwargs: object) -> object:
-        if isinstance(first, (str, list, tuple)):
-            first = _as_message_list(first, self._block)
-        return self._inner.invoke(first, *args, **kwargs)
+    def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # noqa: A002
+        return self._inner.invoke(_prepare_input(input, self._block), config, **kwargs)
 
-    def __or__(self, other: object) -> object:
-        return RunnableLambda(lambda x: other.invoke(self.invoke(x)))
-
-    def __ror__(self, other: object) -> object:
-        return RunnableLambda(lambda x: self.invoke(other.invoke(x)))
-
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
         return getattr(self._inner, name)
 
 
-class _PrefixLLM:
-    """Transparent proxy around an LLM; prepends the block on invoke."""
+class _PrefixLLM(Runnable):
+    """Transparent LLM proxy; prepends the block on invoke."""
 
-    def __init__(self, inner: object, block: str) -> None:
+    def __init__(self, inner: Any, block: str) -> None:
         self._inner = inner
         self._block = block
 
-    def invoke(self, first: object, *args: object, **kwargs: object) -> object:
-        return self._inner.invoke(_as_message_list(first, self._block), *args, **kwargs)
+    def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:  # noqa: A002
+        return self._inner.invoke(_prepare_input(input, self._block), config, **kwargs)
 
-    def bind_tools(self, tools: object, **kwargs: object) -> object:
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Runnable:
         return _PrefixRunnable(self._inner.bind_tools(tools, **kwargs), self._block)
 
-    def with_structured_output(self, schema: object, **kwargs: object) -> object:
-        return _PrefixRunnable(
-            self._inner.with_structured_output(schema, **kwargs), self._block
-        )
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable:
+        return _PrefixRunnable(self._inner.with_structured_output(schema, **kwargs), self._block)
 
-    def __or__(self, other: object) -> object:
-        return RunnableLambda(lambda x: other.invoke(self.invoke(x)))
-
-    def __ror__(self, other: object) -> object:
-        return RunnableLambda(lambda x: self.invoke(other.invoke(x)))
-
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
         return getattr(self._inner, name)
 
 
@@ -97,7 +87,7 @@ def prompt_prefix_plugin(
     """Build a plugin that prepends *instructions* to the given agents.
 
     ``targets`` are factory names from :data:`ta_plugins.FACTORY_NAMES`,
-    e.g. {"create_bull_researcher", "create_market_analyst"}.
+    e.g. ``{"create_bull_researcher", "create_market_analyst"}``.
     """
 
     unknown = sorted(set(targets) - set(FACTORY_NAMES))
@@ -109,7 +99,7 @@ def prompt_prefix_plugin(
     block = instruction_block(text, max_chars)
 
     def make_wrapper(orig: Callable) -> Callable:
-        def factory(llm: object, *args: object, **kwargs: object) -> object:
+        def factory(llm: Any, *args: Any, **kwargs: Any) -> Any:
             return orig(_PrefixLLM(llm, block), *args, **kwargs)
 
         return factory
