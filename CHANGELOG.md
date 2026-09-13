@@ -18,6 +18,13 @@ Breaking changes within the 0.x line are called out explicitly.
   beyond one documented `pyproject.toml` packaging line. Docs in
   `docs/plugins.md`; tests in `tests/plugins/` (unit + offline end-to-end
   against real upstream agent nodes).
+- **ta_plugins `fred_skill_pack`** — skill-pack builtin that teaches agents to
+  use `get_macro_indicators` with ten VERIFIED raw FRED series IDs for
+  demographics/aging analysis (65+ share, old-age dependency, care-demand
+  proxies), with honest caveats (no national 75+/85+ levels on FRED; annual
+  World Bank lag) and the `FRED_API_KEY` requirement stated up front.
+  Defaults to the news analyst (the only agent with the tool bound); docs in
+  `docs/plugins.md`; tests in `tests/plugins/test_ta_plugins_fred_skill_pack.py`.
 
 ## [0.4.0] — 2026-08-31
 

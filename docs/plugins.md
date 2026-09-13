@@ -108,3 +108,51 @@ python examples/custom_prompts_demo.py   # offline demo, no network / no keys
 The offline e2e tests drive the genuine `bull_researcher` factory (resolved
 through the patched module) with a recording fake LLM and assert the
 instruction block actually reaches the model prompt — no network, no keys.
+
+### The `fred_skill_pack` skill-pack plugin
+
+**`fred_skill_pack_plugin(targets=None, max_chars=4000)`** — a prompt-prefix
+plugin that teaches agents to use `get_macro_indicators` with **verified raw
+FRED series IDs** for demographics/aging analysis: 65+ population share,
+old-age dependency ratio, active-aging labor participation, and care-demand
+proxies (nursing/residential care, skilled nursing, home health, senior
+living revenue).
+
+Honest reach: `get_macro_indicators` is bound only to the **news analyst** in
+upstream v0.4.2, so the default target is `create_news_analyst`. Any
+`FACTORY_NAMES` subset is accepted; other agents receive the pack text as
+advisory context but cannot call the tool.
+
+```python
+from ta_plugins import apply_plugins, fred_skill_pack_plugin, register
+
+register(fred_skill_pack_plugin())                     # news analyst (default)
+register(fred_skill_pack_plugin(targets={"create_news_analyst",
+                                        "create_fundamentals_analyst"}))
+apply_plugins()
+```
+
+What the pack text does (always wrapped in the standard untrusted-instruction
+marker and length cap):
+
+- Explains the tool signature and that it accepts raw FRED series IDs.
+- Lists **10 series IDs, each verified to exist** on fred.stlouisfed.org
+  (HTTP 200 + matching title) at packaging time — never guessed IDs.
+- States that the tool needs `FRED_API_KEY`
+  (free key: https://fred.stlouisfed.org/docs/api/api_key.html) and that the
+  agent must say so instead of inventing numbers when it is unset.
+- Instructs growth-rate/cohort-scaling usage labeled as **macro context**,
+  never stock-specific facts, and includes honest caveats (no national
+  75+/85+ population levels on FRED; annual lagging World Bank mirrors;
+  no-disability scope of the 65+ participation series).
+
+#### Maintaining the series list
+
+The verified list lives in `ta_plugins/builtin/fred_skill_pack.py` as the
+`FRED_SERIES` dict (id → plain-language meaning) from which `PACK_TEXT` is
+assembled. To add or replace a series: verify it first by loading
+`https://fred.stlouisfed.org/series/<ID>` (expect HTTP 200 and a matching
+title), then add exactly that ID and a concise meaning to `FRED_SERIES`.
+The tests enforce dict/pack-text sync, ID shape, and the size cap — run
+`pytest tests/plugins -q` after edits. FRED occasionally retires series; if
+one starts 404ing, remove it from the dict and note the caveats still hold.

@@ -12,6 +12,7 @@ Public API:
     FACTORY_NAMES              -- factories plugins may wrap
     custom_instructions_plugin -- builtin: Portfolio-Manager-only injection
     prompt_prefix_plugin       -- builtin: per-agent instructions for ALL agents
+    fred_skill_pack_plugin     -- builtin: verified-FRED demographics skill pack
 
 Zero third-party dependencies beyond tradingagents itself. Importing this
 package has no side effects: nothing is registered or patched until you
@@ -19,6 +20,7 @@ explicitly call :func:`register` / :func:`apply_plugins`.
 """
 
 from .builtin.custom_instructions import custom_instructions_plugin
+from .builtin.fred_skill_pack import fred_skill_pack_plugin
 from .builtin.labels import DEFAULT_MAX_CHARS
 from .builtin.prompt_prefix import prompt_prefix_plugin
 from .patching import FACTORY_NAMES, apply_plugins, plugin_scope, reset_patches
@@ -31,6 +33,7 @@ __all__ = [
     "PluginRegistry",
     "apply_plugins",
     "custom_instructions_plugin",
+    "fred_skill_pack_plugin",
     "get_registry",
     "plugin_scope",
     "prompt_prefix_plugin",
